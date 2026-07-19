@@ -1,10 +1,11 @@
-/* paperBrain service worker — caches the app shell for offline resilience.
+/* paperBrain service worker — asset-only cache for offline resilience.
+   Do NOT cache HTML/document navigations: that breaks Next.js App Router
+   hydration and Supabase auth redirects (especially in the installed PWA).
    Offline note editing / sync is intentionally out of scope. */
 
-const CACHE_NAME = "paperbrain-shell-v1";
+const CACHE_NAME = "paperbrain-shell-v2";
 
 const PRECACHE_URLS = [
-  "/",
   "/offline",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
@@ -16,7 +17,16 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(CACHE_NAME);
-      await cache.addAll(PRECACHE_URLS);
+      // Precache individually so one missing asset does not fail install.
+      await Promise.all(
+        PRECACHE_URLS.map(async (url) => {
+          try {
+            await cache.add(url);
+          } catch (err) {
+            console.warn("SW precache skipped", url, err);
+          }
+        })
+      );
       await self.skipWaiting();
     })()
   );
@@ -46,7 +56,7 @@ self.addEventListener("fetch", (event) => {
   // Only handle same-origin requests
   if (url.origin !== self.location.origin) return;
 
-  // Never cache API / auth / Supabase-bound navigations via opaque paths
+  // Never intercept API / auth
   if (
     url.pathname.startsWith("/api/") ||
     url.pathname.startsWith("/auth/")
@@ -54,22 +64,17 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // App navigations: network-first, fall back to cached shell / offline page
+  // Navigations: network only while online. Never cache HTML.
+  // Offline: fall back to the static /offline page only.
   if (request.mode === "navigate") {
     event.respondWith(
       (async () => {
         try {
-          const fresh = await fetch(request);
-          const cache = await caches.open(CACHE_NAME);
-          void cache.put(request, fresh.clone());
-          return fresh;
+          return await fetch(request);
         } catch {
-          const cached =
-            (await caches.match(request)) ||
-            (await caches.match("/")) ||
-            (await caches.match("/offline"));
+          const offline = await caches.match("/offline");
           return (
-            cached ||
+            offline ||
             new Response("You’re offline", {
               status: 503,
               headers: { "Content-Type": "text/plain; charset=utf-8" },
@@ -81,35 +86,34 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Static assets (_next/static, icons): cache-first
+  // Static assets only: cache-first
   const isStaticAsset =
     url.pathname.startsWith("/_next/static/") ||
     url.pathname.startsWith("/icons/") ||
-    url.pathname.endsWith(".svg") ||
-    url.pathname.endsWith(".png") ||
+    url.pathname === "/icon.svg" ||
     url.pathname.endsWith(".ico") ||
     url.pathname.endsWith(".webmanifest");
 
-  if (isStaticAsset) {
-    event.respondWith(
-      (async () => {
-        const cached = await caches.match(request);
-        if (cached) return cached;
+  if (!isStaticAsset) return;
 
-        try {
-          const fresh = await fetch(request);
-          if (fresh.ok) {
-            const cache = await caches.open(CACHE_NAME);
-            void cache.put(request, fresh.clone());
-          }
-          return fresh;
-        } catch {
-          return (
-            (await caches.match(request)) ||
-            new Response("", { status: 504 })
-          );
+  event.respondWith(
+    (async () => {
+      const cached = await caches.match(request);
+      if (cached) return cached;
+
+      try {
+        const fresh = await fetch(request);
+        if (fresh.ok) {
+          const cache = await caches.open(CACHE_NAME);
+          void cache.put(request, fresh.clone());
         }
-      })()
-    );
-  }
+        return fresh;
+      } catch {
+        return (
+          (await caches.match(request)) ||
+          new Response("", { status: 504 })
+        );
+      }
+    })()
+  );
 });
