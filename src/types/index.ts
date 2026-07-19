@@ -10,6 +10,7 @@ export type NoteId = string;
 export type TagId = string;
 export type SourceId = string;
 export type NoteLinkId = string;
+export type FolderId = string;
 
 /** Tiptap document JSON (ProseMirror schema). */
 export type TipTapDoc = {
@@ -26,6 +27,19 @@ export type Note = {
   created_at: string;
   updated_at: string;
   user_id: string;
+  folder_id: FolderId | null;
+  /** Template used at creation, if any (e.g. "fact"). Null = blank/freeform. */
+  template_type: string | null;
+};
+
+export type Folder = {
+  id: FolderId;
+  name: string;
+  parent_id: FolderId | null;
+  user_id: string;
+  position: number;
+  is_inbox: boolean;
+  created_at: string;
 };
 
 export type Source = {

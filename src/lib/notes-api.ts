@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
+import { ensureInboxFolder } from "@/lib/folders-api";
 import { EMPTY_DOC } from "@/lib/notes";
-import type { Note, TipTapDoc } from "@/types";
+import type { FolderId, Note, TipTapDoc } from "@/types";
 
 export async function fetchNotes(): Promise<Note[]> {
   const supabase = createClient();
@@ -27,6 +28,12 @@ export async function fetchNote(id: string): Promise<Note | null> {
 
 export type CreateNoteOptions = {
   title?: string;
+  /** Defaults to the user's Inbox when omitted. */
+  folderId?: FolderId | null;
+  content?: TipTapDoc;
+  content_text?: string;
+  /** Optional template id persisted for future filtering (e.g. "fact"). */
+  templateType?: string | null;
 };
 
 export async function createNote(
@@ -41,13 +48,21 @@ export async function createNote(
   if (userError) throw userError;
   if (!user) throw new Error("Not authenticated");
 
+  let folderId = options.folderId ?? null;
+  if (!folderId) {
+    const inbox = await ensureInboxFolder();
+    folderId = inbox.id;
+  }
+
   const { data, error } = await supabase
     .from("notes")
     .insert({
       title: options.title?.trim() ?? "",
-      content: EMPTY_DOC,
-      content_text: "",
+      content: options.content ?? EMPTY_DOC,
+      content_text: options.content_text ?? "",
       user_id: user.id,
+      folder_id: folderId,
+      template_type: options.templateType ?? null,
     })
     .select("*")
     .single();

@@ -213,3 +213,104 @@ body {
 .note-editor .source-block--selected {
   outline: none;
 }
+
+.note-editor .note-image-wrap {
+  margin: 0.85em 0;
+}
+
+.note-editor .note-image-frame {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--color-hover);
+}
+
+.note-editor .note-image-wrap--selected .note-image-frame {
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 45%, transparent);
+  outline-offset: 2px;
+}
+
+.note-editor .note-image {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  cursor: zoom-in;
+  vertical-align: middle;
+}
+
+.note-editor .note-image-fallback {
+  display: flex;
+  min-height: 6rem;
+  min-width: 10rem;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  color: var(--color-muted-subtle);
+  font-size: 0.8125rem;
+}
+
+.note-editor .note-image-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  background: color-mix(in srgb, var(--color-foreground) 45%, transparent);
+  pointer-events: none;
+}
+
+.note-editor .note-image-wrap--uploading .note-image {
+  filter: blur(1px) saturate(0.85);
+}
+
+/* Quick capture overlay editor */
+.quick-capture-editor p {
+  margin: 0.25em 0;
+}
+
+.quick-capture-editor p.is-editor-empty:first-child::before {
+  color: var(--color-muted-subtle);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.quick-capture-editor h1 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0.5em 0 0.25em;
+}
+
+.quick-capture-editor h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0.45em 0 0.2em;
+}
+
+.quick-capture-editor ul,
+.quick-capture-editor ol {
+  margin: 0.35em 0;
+  padding-left: 1.25em;
+}
+
+.quick-capture-editor ul {
+  list-style: disc;
+}
+
+.quick-capture-editor ol {
+  list-style: decimal;
+}
+
+.quick-capture-editor blockquote {
+  border-left: 2px solid var(--color-border);
+  color: var(--color-muted);
+  margin: 0.4em 0;
+  padding-left: 0.75em;
+}

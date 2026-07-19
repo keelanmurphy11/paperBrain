@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import type { FolderId } from "@/types";
 
 export type SearchMatchedVia = "title" | "content" | "tag" | "source";
 
@@ -24,6 +25,9 @@ export type SearchResult = {
   matched_via: SearchMatchedVia[];
   sources: SearchResultSource[];
   tags: SearchResultTag[];
+  folder_id: FolderId | null;
+  folder_name: string | null;
+  folder_path: string | null;
 };
 
 type SearchNotesRow = {
@@ -35,6 +39,9 @@ type SearchNotesRow = {
   matched_via: string[] | null;
   sources: SearchResultSource[] | null;
   tags: SearchResultTag[] | null;
+  folder_id: string | null;
+  folder_name: string | null;
+  folder_path: string | null;
 };
 
 function normalizeVia(via: string[] | null): SearchMatchedVia[] {
@@ -50,9 +57,14 @@ function normalizeVia(via: string[] | null): SearchMatchedVia[] {
   );
 }
 
+export type SearchNotesOptions = {
+  limit?: number;
+  folderId?: FolderId | null;
+};
+
 export async function searchNotes(
   query: string,
-  limit = 25
+  options: SearchNotesOptions = {}
 ): Promise<SearchResult[]> {
   const trimmed = query.trim();
   if (!trimmed) return [];
@@ -60,7 +72,8 @@ export async function searchNotes(
   const supabase = createClient();
   const { data, error } = await supabase.rpc("search_notes", {
     search_query: trimmed,
-    result_limit: limit,
+    result_limit: options.limit ?? 25,
+    folder_filter: options.folderId ?? null,
   });
 
   if (error) throw error;
@@ -74,5 +87,8 @@ export async function searchNotes(
     matched_via: normalizeVia(row.matched_via),
     sources: Array.isArray(row.sources) ? row.sources : [],
     tags: Array.isArray(row.tags) ? row.tags : [],
+    folder_id: row.folder_id,
+    folder_name: row.folder_name,
+    folder_path: row.folder_path,
   }));
 }

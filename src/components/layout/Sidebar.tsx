@@ -1,26 +1,30 @@
 "use client";
 
+import { QuickCaptureTrigger } from "@/components/capture/QuickCaptureTrigger";
+import { FolderTree } from "@/components/layout/FolderTree";
 import { NewNoteButton } from "@/components/layout/NewNoteButton";
-import { NoteList } from "@/components/layout/NoteList";
 import { SearchTrigger } from "@/components/layout/SearchTrigger";
+import { SettingsMenu } from "@/components/layout/SettingsMenu";
 import { TagsSection } from "@/components/layout/TagsSection";
-import { NoteListSkeleton } from "@/components/ui/Skeletons";
-import type { Note } from "@/types";
+import type { FolderId, Note } from "@/types";
 import { cn } from "@/lib/utils";
 
 type SidebarProps = {
   notes: Note[];
   selectedId: string | null;
   selectedTagId: string | null;
+  activeFolderId: string | null;
   onSelectNote: (id: string) => void;
   onSelectTag: (tagId: string | null) => void;
+  onSelectFolder: (folderId: FolderId) => void;
   onNewNote: () => void;
+  onNewNoteInFolder: (folderId: FolderId) => void;
   onOpenSearch: () => void;
+  onOpenQuickCapture: () => void;
   isLoading?: boolean;
   isError?: boolean;
   errorMessage?: string;
   creating?: boolean;
-  totalNoteCount?: number;
   className?: string;
 };
 
@@ -28,15 +32,18 @@ export function Sidebar({
   notes,
   selectedId,
   selectedTagId,
+  activeFolderId,
   onSelectNote,
   onSelectTag,
+  onSelectFolder,
   onNewNote,
+  onNewNoteInFolder,
   onOpenSearch,
+  onOpenQuickCapture,
   isLoading,
   isError,
   errorMessage,
   creating,
-  totalNoteCount = 0,
   className,
 }: SidebarProps) {
   return (
@@ -57,45 +64,31 @@ export function Sidebar({
         </div>
 
         <NewNoteButton onClick={onNewNote} disabled={creating} />
+        <QuickCaptureTrigger onClick={onOpenQuickCapture} />
         <SearchTrigger onClick={onOpenSearch} />
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <TagsSection
           selectedTagId={selectedTagId}
           onSelectTag={onSelectTag}
         />
 
-        <p className="px-5 pb-1.5 pt-3 text-[11px] font-medium uppercase tracking-wider text-muted-subtle">
-          {selectedTagId ? "Filtered" : "Recent"}
-        </p>
-        {isLoading ? (
-          <NoteListSkeleton />
-        ) : isError ? (
-          <div className="px-5 py-8">
-            <p className="text-sm text-danger" role="alert">
-              {errorMessage ?? "Couldn’t load notes"}
-            </p>
-            <p className="mt-1 text-xs text-muted-subtle">
-              Check your connection and refresh.
-            </p>
-          </div>
-        ) : (
-          <NoteList
-            notes={notes}
-            selectedId={selectedId}
-            onSelect={onSelectNote}
-            onCreateNote={onNewNote}
-            emptyMessage={
-              selectedTagId
-                ? "No notes with this tag"
-                : totalNoteCount === 0
-                  ? "Nothing here yet — create your first note"
-                  : "No notes yet"
-            }
-            showCreateHint={!selectedTagId && totalNoteCount === 0}
-          />
-        )}
+        <FolderTree
+          notes={notes}
+          selectedNoteId={selectedId}
+          activeFolderId={activeFolderId}
+          onSelectNote={onSelectNote}
+          onSelectFolder={onSelectFolder}
+          onNewNoteInFolder={onNewNoteInFolder}
+          isLoading={isLoading}
+          isError={isError}
+          errorMessage={errorMessage}
+        />
+      </div>
+
+      <div className="shrink-0 border-t border-border-subtle px-2 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+        <SettingsMenu />
       </div>
     </aside>
   );

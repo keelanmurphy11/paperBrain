@@ -6,6 +6,7 @@ import {
   Bold,
   Heading1,
   Heading2,
+  ImagePlus,
   Italic,
   Link as LinkIcon,
   List,
@@ -17,9 +18,13 @@ import { cn } from "@/lib/utils";
 
 type EditorBubbleMenuProps = {
   editor: Editor;
+  onInsertImage?: () => void;
 };
 
-export function EditorBubbleMenu({ editor }: EditorBubbleMenuProps) {
+export function EditorBubbleMenu({
+  editor,
+  onInsertImage,
+}: EditorBubbleMenuProps) {
   return (
     <BubbleMenu
       editor={editor}
@@ -106,6 +111,11 @@ export function EditorBubbleMenu({ editor }: EditorBubbleMenuProps) {
       >
         <LinkIcon className="size-3.5" strokeWidth={2} />
       </MenuButton>
+      {onInsertImage ? (
+        <MenuButton label="Insert image" onClick={onInsertImage}>
+          <ImagePlus className="size-3.5" strokeWidth={2} />
+        </MenuButton>
+      ) : null}
     </BubbleMenu>
   );
 }

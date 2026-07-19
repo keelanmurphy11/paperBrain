@@ -1,6 +1,13 @@
 "use client";
 
-import { ExternalLink, FileText, Search } from "lucide-react";
+import {
+  ChevronDown,
+  ExternalLink,
+  FileText,
+  Folder as FolderIcon,
+  Search,
+  X,
+} from "lucide-react";
 import {
   useEffect,
   useId,
@@ -9,10 +16,15 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
+import {
+  buildFolderPickerOptions,
+  useFolders,
+} from "@/hooks/use-folders";
 import { useSearchNotes } from "@/hooks/use-search";
 import type { SearchResult } from "@/lib/search-api";
 import { noteDisplayTitle } from "@/lib/fuzzy";
 import { cn } from "@/lib/utils";
+import type { FolderId } from "@/types";
 
 type SearchPaletteProps = {
   open: boolean;
@@ -30,9 +42,18 @@ export function SearchPalette({
   const listRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [highlight, setHighlight] = useState(0);
+  const [folderFilter, setFolderFilter] = useState<FolderId | null>(null);
+  const [folderMenuOpen, setFolderMenuOpen] = useState(false);
+
+  const { data: folders = [] } = useFolders();
+  const folderOptions = useMemo(
+    () => buildFolderPickerOptions(folders),
+    [folders]
+  );
+  const selectedFolder = folderOptions.find((o) => o.id === folderFilter);
 
   const { data: results = [], isFetching, isError, debouncedQuery, isDebouncing } =
-    useSearchNotes(query, open);
+    useSearchNotes(query, open, folderFilter);
 
   const hasQuery = query.trim().length > 0;
   const showResultList = hasQuery && results.length > 0 && !isError;
@@ -46,13 +67,15 @@ export function SearchPalette({
     if (!open) return;
     setQuery("");
     setHighlight(0);
+    setFolderFilter(null);
+    setFolderMenuOpen(false);
     const id = window.setTimeout(() => inputRef.current?.focus(), 0);
     return () => window.clearTimeout(id);
   }, [open]);
 
   useEffect(() => {
     setHighlight(0);
-  }, [debouncedQuery, results]);
+  }, [debouncedQuery, results, folderFilter]);
 
   useEffect(() => {
     if (!open) return;
@@ -60,13 +83,17 @@ export function SearchPalette({
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         event.preventDefault();
+        if (folderMenuOpen) {
+          setFolderMenuOpen(false);
+          return;
+        }
         onClose();
       }
     }
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
+  }, [open, onClose, folderMenuOpen]);
 
   useEffect(() => {
     if (!open) return;
@@ -157,6 +184,57 @@ export function SearchPalette({
           </kbd>
         </div>
 
+        <div className="relative flex items-center gap-2 border-b border-border-subtle px-3.5 py-2">
+          <span className="text-[11px] font-medium uppercase tracking-wider text-muted-subtle">
+            Folder
+          </span>
+          <button
+            type="button"
+            onClick={() => setFolderMenuOpen((v) => !v)}
+            aria-expanded={folderMenuOpen}
+            className={cn(
+              "inline-flex min-h-8 max-w-[14rem] items-center gap-1 rounded-md px-2 text-xs transition-colors duration-fast ease-out",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30",
+              folderFilter
+                ? "bg-accent-subtle text-accent"
+                : "text-muted hover:bg-hover hover:text-foreground"
+            )}
+          >
+            <FolderIcon className="size-3 shrink-0" strokeWidth={1.75} aria-hidden />
+            <span className="truncate">
+              {selectedFolder?.path ?? "All folders"}
+            </span>
+            <ChevronDown
+              className="size-3 shrink-0 opacity-70"
+              strokeWidth={1.75}
+              aria-hidden
+            />
+          </button>
+          {folderFilter ? (
+            <button
+              type="button"
+              onClick={() => setFolderFilter(null)}
+              aria-label="Clear folder filter"
+              className="inline-flex size-7 items-center justify-center rounded-md text-muted-subtle transition-colors duration-fast ease-out hover:bg-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+            >
+              <X className="size-3.5" strokeWidth={1.75} aria-hidden />
+            </button>
+          ) : null}
+
+          {folderMenuOpen ? (
+            <SearchFolderMenu
+              options={folderOptions}
+              selectedId={folderFilter}
+              onSelect={(id) => {
+                setFolderFilter(id);
+                setFolderMenuOpen(false);
+                inputRef.current?.focus();
+              }}
+              onClose={() => setFolderMenuOpen(false)}
+            />
+          ) : null}
+        </div>
+
         <div
           id="search-results"
           ref={listRef}
@@ -177,6 +255,7 @@ export function SearchPalette({
           ) : results.length === 0 ? (
             <p className="px-4 py-10 text-center text-sm text-muted-subtle">
               Nothing matched “{debouncedQuery}”
+              {selectedFolder ? ` in ${selectedFolder.path}` : ""}
             </p>
           ) : (
             <div className="py-1.5">
@@ -204,6 +283,66 @@ export function SearchPalette({
   );
 }
 
+function SearchFolderMenu({
+  options,
+  selectedId,
+  onSelect,
+  onClose,
+}: {
+  options: ReturnType<typeof buildFolderPickerOptions>;
+  selectedId: FolderId | null;
+  onSelect: (id: FolderId | null) => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onPointerDown(event: PointerEvent) {
+      if (!ref.current?.contains(event.target as Node)) onClose();
+    }
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={ref}
+      role="listbox"
+      aria-label="Filter by folder"
+      className="absolute left-3 top-full z-10 mt-1 max-h-56 w-[min(16rem,calc(100%-1.5rem))] overflow-y-auto rounded-lg border border-border bg-surface py-1 shadow-lg"
+    >
+      <button
+        type="button"
+        role="option"
+        aria-selected={selectedId === null}
+        onClick={() => onSelect(null)}
+        className={cn(
+          "flex w-full px-3 py-1.5 text-left text-sm transition-colors duration-fast ease-out hover:bg-hover",
+          selectedId === null ? "text-accent" : "text-foreground"
+        )}
+      >
+        All folders
+      </button>
+      {options.map((option) => (
+        <button
+          key={option.id}
+          type="button"
+          role="option"
+          aria-selected={selectedId === option.id}
+          onClick={() => onSelect(option.id)}
+          className={cn(
+            "flex w-full px-3 py-1.5 text-left text-sm transition-colors duration-fast ease-out hover:bg-hover",
+            selectedId === option.id ? "text-accent" : "text-foreground"
+          )}
+          style={{ paddingLeft: 12 + option.depth * 12 }}
+        >
+          {option.path}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function EmptyState() {
   return (
     <div className="px-4 py-10 text-center">
@@ -211,7 +350,7 @@ function EmptyState() {
         Search titles, content, tags, and sources
       </p>
       <p className="mt-1.5 text-xs text-muted-subtle/80">
-        Tip: try a tag name or a source title
+        Tip: narrow by folder using the filter above
       </p>
     </div>
   );
@@ -271,6 +410,13 @@ function SearchResultRow({
             </span>
           ) : null}
         </div>
+
+        {result.folder_path ? (
+          <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-subtle">
+            <FolderIcon className="size-2.5 shrink-0" strokeWidth={1.75} aria-hidden />
+            <span className="truncate">{result.folder_path}</span>
+          </p>
+        ) : null}
 
         {result.snippet ? (
           <p className="mt-0.5 line-clamp-2 text-xs text-muted">

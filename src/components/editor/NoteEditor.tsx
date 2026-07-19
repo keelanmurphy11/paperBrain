@@ -1,7 +1,6 @@
 "use client";
 
-import type { Editor } from "@tiptap/react";
-import { ChevronLeft, Trash2 } from "lucide-react";
+import { ChevronLeft, Download, Trash2 } from "lucide-react";
 import {
   useEffect,
   useRef,
@@ -11,17 +10,22 @@ import {
 import { AddSourceForm } from "@/components/editor/AddSourceForm";
 import { BacklinksSection } from "@/components/editor/BacklinksSection";
 import { DeleteNoteDialog } from "@/components/editor/DeleteNoteDialog";
+import { InsertImageButton } from "@/components/editor/InsertImageButton";
+import { NoteFolderBreadcrumb } from "@/components/editor/NoteFolderBreadcrumb";
 import { NoteTags } from "@/components/editor/NoteTags";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
+import { useFolders } from "@/hooks/use-folders";
 import { useDeleteNote, useUpdateNote } from "@/hooks/use-notes";
 import { useSyncOutgoingLinks } from "@/hooks/use-links";
 import { useNoteSources } from "@/hooks/use-sources";
 import { collectNoteLinkIdsFromContent } from "@/components/editor/extensions/note-link";
+import { exportSingleNote } from "@/lib/export-notes";
 import { EMPTY_DOC, isTipTapDoc } from "@/lib/notes";
 import { toast } from "@/store/toast";
 import { useUiStore } from "@/store/ui";
 import type { Note, Source, TipTapDoc } from "@/types";
 import { cn } from "@/lib/utils";
+import type { Editor } from "@tiptap/react";
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 
@@ -85,12 +89,16 @@ function NoteEditorInner({
   const { mutateAsync: updateNoteAsync } = useUpdateNote();
   const { mutateAsync: syncLinksAsync } = useSyncOutgoingLinks();
   const deleteNote = useDeleteNote();
+  const { data: folders = [] } = useFolders();
   const { data: sources = [], isSuccess: sourcesLoaded } = useNoteSources(
     note.id
   );
 
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const editorRef = useRef<Editor | null>(null);
+  const uploadImagesRef = useRef<((files: File[]) => Promise<void>) | null>(
+    null
+  );
   const [title, setTitle] = useState(note.title);
   const [content, setContent] = useState<TipTapDoc>(
     isTipTapDoc(note.content) ? note.content : EMPTY_DOC
@@ -99,6 +107,7 @@ function NoteEditorInner({
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [addSourceOpen, setAddSourceOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const skipNextSave = useRef(true);
   const dirtyRef = useRef(false);
@@ -246,6 +255,33 @@ function NoteEditorInner({
     }
   }
 
+  async function handleExport() {
+    setExporting(true);
+    try {
+      // Prefer live editor JSON so unsaved edits are included
+      const liveContent =
+        (editorRef.current?.getJSON() as TipTapDoc | undefined) ?? content;
+      await exportSingleNote(
+        {
+          ...note,
+          title,
+          content: liveContent,
+          content_text: contentText,
+        },
+        folders
+      );
+      toast("Note exported", "success");
+    } catch (err) {
+      console.error(err);
+      toast(
+        err instanceof Error ? err.message : "Couldn’t export note",
+        "error"
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <section
       className={cn("flex h-full min-h-0 flex-col bg-surface", className)}
@@ -261,6 +297,16 @@ function NoteEditorInner({
           <SaveIndicator status={saveStatus} />
           <button
             type="button"
+            onClick={() => void handleExport()}
+            disabled={exporting}
+            aria-label="Export as markdown"
+            title="Export as markdown"
+            className="flex size-11 items-center justify-center rounded-lg text-muted-subtle transition-colors duration-fast ease-out hover:bg-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 disabled:opacity-60"
+          >
+            <Download className="size-4" strokeWidth={1.75} aria-hidden />
+          </button>
+          <button
+            type="button"
             onClick={() => setConfirmDelete(true)}
             aria-label="Delete note"
             className="flex size-11 items-center justify-center rounded-lg text-muted-subtle transition-colors duration-fast ease-out hover:bg-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
@@ -272,6 +318,12 @@ function NoteEditorInner({
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-editor px-4 pb-24 pt-4 md:px-12 md:pt-8">
+          <NoteFolderBreadcrumb
+            noteId={note.id}
+            folderId={note.folder_id}
+            className="mb-2"
+          />
+
           <textarea
             ref={titleRef}
             value={title}
@@ -284,12 +336,22 @@ function NoteEditorInner({
 
           <NoteTags noteId={note.id} />
 
-          <div className="mt-2">
+          <div className="mt-2 flex flex-wrap items-center gap-1">
             <AddSourceForm
               noteId={note.id}
               open={addSourceOpen}
               onOpenChange={setAddSourceOpen}
               onSourceCreated={handleSourceCreated}
+            />
+            <InsertImageButton
+              onPickFiles={async (files) => {
+                const upload = uploadImagesRef.current;
+                if (!upload) {
+                  toast("Editor isn’t ready yet", "error");
+                  return;
+                }
+                await upload(files);
+              }}
             />
           </div>
 
@@ -301,6 +363,9 @@ function NoteEditorInner({
               sourcesReady={sourcesLoaded}
               onReady={(editor) => {
                 editorRef.current = editor;
+              }}
+              onUploadReady={(upload) => {
+                uploadImagesRef.current = upload;
               }}
               onUpdate={(nextContent, plainText) => {
                 setContent(nextContent);
