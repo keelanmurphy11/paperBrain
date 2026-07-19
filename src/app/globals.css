@@ -268,49 +268,43 @@ body {
   filter: blur(1px) saturate(0.85);
 }
 
-/* Quick capture overlay editor */
-.quick-capture-editor p {
-  margin: 0.25em 0;
+/* Mobile navigational stack transitions */
+@keyframes mobile-push {
+  from {
+    opacity: 0.92;
+    transform: translateX(12%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
-.quick-capture-editor p.is-editor-empty:first-child::before {
-  color: var(--color-muted-subtle);
-  content: attr(data-placeholder);
-  float: left;
-  height: 0;
-  pointer-events: none;
+@keyframes mobile-pop {
+  from {
+    opacity: 0.92;
+    transform: translateX(-8%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
-.quick-capture-editor h1 {
-  font-size: 1.15rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  margin: 0.5em 0 0.25em;
+@media (max-width: 767px) {
+  .animate-mobile-push {
+    animation: mobile-push var(--duration-normal) var(--ease-out) both;
+  }
+
+  .animate-mobile-pop {
+    animation: mobile-pop var(--duration-normal) var(--ease-out) both;
+  }
 }
 
-.quick-capture-editor h2 {
-  font-size: 1rem;
-  font-weight: 600;
-  margin: 0.45em 0 0.2em;
+@media (prefers-reduced-motion: reduce) {
+  .animate-mobile-push,
+  .animate-mobile-pop {
+    animation: none;
+  }
 }
 
-.quick-capture-editor ul,
-.quick-capture-editor ol {
-  margin: 0.35em 0;
-  padding-left: 1.25em;
-}
-
-.quick-capture-editor ul {
-  list-style: disc;
-}
-
-.quick-capture-editor ol {
-  list-style: decimal;
-}
-
-.quick-capture-editor blockquote {
-  border-left: 2px solid var(--color-border);
-  color: var(--color-muted);
-  margin: 0.4em 0;
-  padding-left: 0.75em;
-}

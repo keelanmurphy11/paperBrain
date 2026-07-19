@@ -28,8 +28,6 @@ export type Note = {
   updated_at: string;
   user_id: string;
   folder_id: FolderId | null;
-  /** Template used at creation, if any (e.g. "fact"). Null = blank/freeform. */
-  template_type: string | null;
 };
 
 export type Folder = {

@@ -135,7 +135,6 @@ const note: Note = {
   updated_at: "2026-07-19T12:30:00.000Z",
   user_id: "u1",
   folder_id: null,
-  template_type: "fact",
 };
 
 const full = noteToMarkdown({
@@ -164,7 +163,6 @@ checks.push(
   ["frontmatter folder", full.includes("Training / Nutrition")],
   ["frontmatter tags", full.includes("supplements") && full.includes("training")],
   ["frontmatter sources", full.includes("https://pubmed.example/1")],
-  ["frontmatter template", full.includes("template: fact")],
   ["h1 title", full.includes("# Creatine & power")]
 );
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { Download, FileDown, FolderArchive, Settings } from "lucide-react";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useFolders } from "@/hooks/use-folders";
 import { useNotes } from "@/hooks/use-notes";
@@ -8,9 +9,9 @@ import {
   exportAllNotesAsZip,
   exportSingleNote,
 } from "@/lib/export-notes";
+import { parseNoteIdFromPath } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 import { toast } from "@/store/toast";
-import { useUiStore } from "@/store/ui";
 
 type SettingsMenuProps = {
   className?: string;
@@ -21,7 +22,8 @@ export function SettingsMenu({ className }: SettingsMenuProps) {
   const [busy, setBusy] = useState<"single" | "all" | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  const selectedNoteId = useUiStore((s) => s.selectedNoteId);
+  const pathname = usePathname();
+  const selectedNoteId = parseNoteIdFromPath(pathname);
   const { data: notes = [] } = useNotes();
   const { data: folders = [] } = useFolders();
   const selectedNote =

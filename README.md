@@ -39,7 +39,8 @@ Migrations live in `supabase/migrations/`:
 3. `20260719160000_folders.sql` — folders (Inbox + one-level nesting), `notes.folder_id`
 4. `20260719170000_search_notes_folders.sql` — search results include folder path + optional folder filter
 5. `20260719180000_note_images_storage.sql` — `note-images` Storage bucket + owner-scoped RLS
-6. `20260719190000_note_template_type.sql` — optional `notes.template_type` for Fact scaffolds
+6. `20260719190000_note_template_type.sql` — added `notes.template_type` (later removed)
+7. `20260719200000_drop_note_template_type.sql` — drops `notes.template_type`
 
 ### Option A — Supabase CLI (recommended)
 
@@ -80,9 +81,8 @@ Open [http://localhost:3000](http://localhost:3000), sign in, and start writing.
 | Shortcut | Action |
 |---|---|
 | `⌘K` / `Ctrl+K` | Open / close search |
-| `⌘N` / `Ctrl+N` | New note (full editor) |
-| `⌘⇧N` / `Ctrl+Shift+N` | Quick capture |
-| `Escape` | Close search / quick capture / dismiss dialogs |
+| `⌘N` / `Ctrl+N` | New note |
+| `Escape` | Close search / dismiss dialogs |
 | `[[` in the editor | Insert a wiki-link to another note |
 
 ## Deploy to Vercel
@@ -103,10 +103,8 @@ src/
   app/                 # routes, layout, offline page, manifest
   components/
     editor/            # TipTap note editor, tags, sources, backlinks
-    layout/            # shell, sidebar, note list
-    capture/           # Quick capture overlay
+    layout/            # shell, sidebar, note list, settings/export
     search/            # Cmd+K palette
-    layout/            # Sidebar, settings/export menu
     pwa/               # service worker registration
   hooks/               # React Query hooks
   lib/                 # Supabase clients, APIs

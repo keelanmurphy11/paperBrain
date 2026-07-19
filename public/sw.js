@@ -3,7 +3,7 @@
    hydration and Supabase auth redirects (especially in the installed PWA).
    Offline note editing / sync is intentionally out of scope. */
 
-const CACHE_NAME = "paperbrain-shell-v2";
+const CACHE_NAME = "paperbrain-shell-v4";
 
 const PRECACHE_URLS = [
   "/offline",

@@ -1,178 +1,178 @@
 "use client";
 
 import { useCallback, useEffect, useMemo } from "react";
-import { QuickCaptureOverlay } from "@/components/capture/QuickCaptureOverlay";
-import { NoteEditor } from "@/components/editor/NoteEditor";
+import { usePathname, useRouter } from "next/navigation";
 import { NewNoteButton } from "@/components/layout/NewNoteButton";
+import { MobilePageTransition } from "@/components/layout/MobilePageTransition";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { TemplatePicker } from "@/components/layout/TemplatePicker";
-import { SearchPalette } from "@/components/search/SearchPalette";
-import { NoteEditorSkeleton } from "@/components/ui/Skeletons";
+import { MobileSearchOverlay } from "@/components/search/SidebarSearch";
+import { useAppNav } from "@/hooks/use-app-nav";
 import { useFolders } from "@/hooks/use-folders";
 import { useCreateNote, useNotes } from "@/hooks/use-notes";
-import { useNoteIdsForTag } from "@/hooks/use-tags";
-import { getTemplateContent, type NoteTemplateId } from "@/lib/note-templates";
+import {
+  parseFolderIdFromPath,
+  parseNoteIdFromPath,
+  registerAppNavigate,
+} from "@/lib/navigation";
 import { toast } from "@/store/toast";
 import { useUiStore } from "@/store/ui";
 import { cn } from "@/lib/utils";
 import type { FolderId } from "@/types";
 
-export function AppShell() {
-  const { data: notes = [], isLoading, isError, error, isSuccess } = useNotes();
+type AppShellProps = {
+  children: React.ReactNode;
+};
+
+/**
+ * Persistent app chrome: sidebar as nav rail (always on desktop;
+ * full-screen folder list on mobile at `/`), main content via App Router.
+ */
+export function AppShell({ children }: AppShellProps) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { data: notes = [], isLoading, isError, error } = useNotes();
   const { data: folders = [] } = useFolders();
   const createNote = useCreateNote();
+  const { openNote, openSearch } = useAppNav();
 
-  const selectedNoteId = useUiStore((s) => s.selectedNoteId);
-  const selectedTagId = useUiStore((s) => s.selectedTagId);
-  const activeFolderId = useUiStore((s) => s.activeFolderId);
-  const mobileView = useUiStore((s) => s.mobileView);
-  const searchOpen = useUiStore((s) => s.searchOpen);
-  const quickCaptureOpen = useUiStore((s) => s.quickCaptureOpen);
-  const templatePickerOpen = useUiStore((s) => s.templatePickerOpen);
-  const templatePickerFolderId = useUiStore((s) => s.templatePickerFolderId);
-  const selectNote = useUiStore((s) => s.selectNote);
-  const setSelectedTagId = useUiStore((s) => s.setSelectedTagId);
-  const setActiveFolderId = useUiStore((s) => s.setActiveFolderId);
-  const openNewNote = useUiStore((s) => s.openNewNote);
-  const goBackToList = useUiStore((s) => s.goBackToList);
-  const openSearch = useUiStore((s) => s.openSearch);
-  const closeSearch = useUiStore((s) => s.closeSearch);
-  const openQuickCapture = useUiStore((s) => s.openQuickCapture);
-  const closeQuickCapture = useUiStore((s) => s.closeQuickCapture);
-  const openTemplatePicker = useUiStore((s) => s.openTemplatePicker);
-  const closeTemplatePicker = useUiStore((s) => s.closeTemplatePicker);
+  const lastFolderId = useUiStore((s) => s.lastFolderId);
+  const mobileHomePane = useUiStore((s) => s.mobileHomePane);
+  const mobileSearchOpen = useUiStore((s) => s.mobileSearchOpen);
+  const mobileSearchScopeFolderId = useUiStore(
+    (s) => s.mobileSearchScopeFolderId
+  );
+  const setLastFolderId = useUiStore((s) => s.setLastFolderId);
+  const setMobileHomePane = useUiStore((s) => s.setMobileHomePane);
+  const closeMobileSearch = useUiStore((s) => s.closeMobileSearch);
 
-  const { data: taggedNoteIds, isLoading: tagFilterLoading } =
-    useNoteIdsForTag(selectedTagId);
+  const activeFolderId = parseFolderIdFromPath(pathname);
+  const isMobileFolderList =
+    pathname === "/" && mobileHomePane === "folders";
+  const isMobileAllNotes =
+    pathname === "/" && mobileHomePane === "all-notes";
 
   const inboxId = useMemo(
     () => folders.find((f) => f.is_inbox)?.id ?? null,
     [folders]
   );
 
-  // Default active folder to Inbox; reset if the active folder was deleted
   useEffect(() => {
-    if (!inboxId) return;
-    if (!activeFolderId) {
-      setActiveFolderId(inboxId);
+    const mq = window.matchMedia("(min-width: 768px)");
+    function syncDesktopHome() {
+      if (mq.matches && pathname === "/") {
+        setMobileHomePane("all-notes");
+      }
+    }
+    syncDesktopHome();
+    mq.addEventListener("change", syncDesktopHome);
+    return () => mq.removeEventListener("change", syncDesktopHome);
+  }, [pathname, setMobileHomePane]);
+
+  useEffect(() => {
+    if (activeFolderId) {
+      setLastFolderId(activeFolderId);
       return;
     }
-    if (
-      folders.length > 0 &&
-      !folders.some((f) => f.id === activeFolderId)
-    ) {
-      setActiveFolderId(inboxId);
+    if (!lastFolderId && inboxId) {
+      setLastFolderId(inboxId);
     }
-  }, [activeFolderId, folders, inboxId, setActiveFolderId]);
+  }, [activeFolderId, inboxId, lastFolderId, setLastFolderId]);
 
-  const filteredNotes = useMemo(() => {
-    if (!selectedTagId) return notes;
-    if (!taggedNoteIds) return [];
-    const allowed = new Set(taggedNoteIds);
-    return notes.filter((note) => allowed.has(note.id));
-  }, [notes, selectedTagId, taggedNoteIds]);
-
-  // On desktop, open the most recent note once notes first load
   useEffect(() => {
-    if (!isSuccess || selectedNoteId || notes.length === 0) return;
-    if (
-      typeof window !== "undefined" &&
-      window.matchMedia("(min-width: 768px)").matches
-    ) {
-      selectNote(notes[0].id);
+    registerAppNavigate((href) => {
+      useUiStore.getState().pushInAppHistory();
+      router.push(href);
+    });
+    return () => registerAppNavigate(null);
+  }, [router]);
+
+  // Keep in-app depth honest when the browser Back/Forward buttons are used
+  useEffect(() => {
+    function onPopState() {
+      useUiStore.getState().popInAppHistory();
     }
-  }, [isSuccess, notes, selectedNoteId, selectNote]);
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
-  const handleNewNote = useCallback(() => {
-    // Full New Note flow — pick an optional template first (Inbox by default)
-    openTemplatePicker(inboxId);
-  }, [inboxId, openTemplatePicker]);
-
-  const handleNewNoteInFolder = useCallback(
-    (folderId: FolderId) => {
-      openTemplatePicker(folderId);
-    },
-    [openTemplatePicker]
-  );
-
-  const handleTemplateSelect = useCallback(
-    async (templateId: NoteTemplateId) => {
-      const folderId =
-        templatePickerFolderId ?? activeFolderId ?? inboxId ?? undefined;
-      const scaffold = getTemplateContent(templateId);
-
+  const createBlankNote = useCallback(
+    async (folderId?: FolderId | null) => {
+      // Cmd+N: open folder → that folder; note page → note's folder;
+      // All Notes / no folder → Inbox
+      const noteId = parseNoteIdFromPath(pathname);
+      const noteFolderId = noteId
+        ? notes.find((n) => n.id === noteId)?.folder_id ?? null
+        : null;
+      const onAllNotes = pathname === "/";
+      const targetFolderId =
+        folderId ??
+        activeFolderId ??
+        noteFolderId ??
+        (onAllNotes ? inboxId : null) ??
+        lastFolderId ??
+        inboxId ??
+        undefined;
       try {
         const note = await createNote.mutateAsync({
-          folderId,
-          content: scaffold.content,
-          content_text: scaffold.content_text,
-          templateType: scaffold.template_type,
+          folderId: targetFolderId,
         });
-        if (folderId) setActiveFolderId(folderId);
-        closeTemplatePicker();
-        // Fact scaffold: land in the body; blank: focus title as before
-        openNewNote(note.id, { focusTitle: templateId === "blank" });
+        if (targetFolderId) setLastFolderId(targetFolderId);
+        openNote(note.id, { focusTitle: true });
       } catch (err) {
         console.error("Failed to create note", err);
         toast("Couldn’t create note. Try again.", "error");
       }
     },
     [
-      templatePickerFolderId,
+      pathname,
+      notes,
       activeFolderId,
+      lastFolderId,
       inboxId,
       createNote,
-      setActiveFolderId,
-      closeTemplatePicker,
-      openNewNote,
+      setLastFolderId,
+      openNote,
     ]
   );
 
-  // Global shortcuts: ⌘K search, ⌘N new note, ⌘⇧N quick capture, Escape closes overlays
+  const handleNewNote = useCallback(() => {
+    void createBlankNote();
+  }, [createBlankNote]);
+
+  const handleNewNoteInFolder = useCallback(
+    (folderId: FolderId) => {
+      void createBlankNote(folderId);
+    },
+    [createBlankNote]
+  );
+
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       const key = event.key.toLowerCase();
       const mod = event.metaKey || event.ctrlKey;
-      const shift = event.shiftKey;
 
-      if (key === "escape") {
-        const state = useUiStore.getState();
-        if (state.templatePickerOpen) {
-          event.preventDefault();
-          closeTemplatePicker();
-          return;
-        }
-        if (state.quickCaptureOpen) {
-          event.preventDefault();
-          closeQuickCapture();
-          return;
-        }
-        if (state.searchOpen) {
-          event.preventDefault();
-          closeSearch();
-        }
-        return;
-      }
+      // Escape for search is handled by SidebarSearch / MobileSearchOverlay
+      // (clear query first, then exit) so AppShell must not steal it.
 
       if (!mod) return;
 
+      // ⌘K always focuses search (even from editor — intentional)
       if (key === "k") {
         event.preventDefault();
-        if (useUiStore.getState().searchOpen) {
-          closeSearch();
-        } else {
-          openSearch();
-        }
+        openSearch();
         return;
       }
 
-      if (key === "n" && shift) {
-        event.preventDefault();
-        openQuickCapture();
-        return;
-      }
-
+      // ⌘N: skip when typing in inputs (except we still allow from editor body)
       if (key === "n") {
+        const target = event.target;
+        if (
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement ||
+          target instanceof HTMLSelectElement
+        ) {
+          return;
+        }
         event.preventDefault();
         handleNewNote();
       }
@@ -180,14 +180,7 @@ export function AppShell() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [
-    openSearch,
-    closeSearch,
-    handleNewNote,
-    openQuickCapture,
-    closeQuickCapture,
-    closeTemplatePicker,
-  ]);
+  }, [openSearch, handleNewNote]);
 
   useEffect(() => {
     if (!isError) return;
@@ -197,28 +190,13 @@ export function AppShell() {
     );
   }, [isError, error]);
 
-  const selectedNote =
-    notes.find((note) => note.id === selectedNoteId) ?? null;
-
-  const listLoading = isLoading || (Boolean(selectedTagId) && tagFilterLoading);
-  const editorLoading = isLoading && !selectedNote;
-
   const sidebarProps = {
-    notes: filteredNotes,
-    selectedId: selectedNoteId,
-    selectedTagId,
-    activeFolderId,
-    onSelectNote: selectNote,
-    onSelectTag: setSelectedTagId,
-    onSelectFolder: setActiveFolderId,
-    onNewNote: handleNewNote,
+    notes,
+    isMobileFolderList,
     onNewNoteInFolder: handleNewNoteInFolder,
-    onOpenSearch: openSearch,
-    onOpenQuickCapture: openQuickCapture,
-    isLoading: listLoading,
+    isLoading,
     isError,
     errorMessage: error instanceof Error ? error.message : undefined,
-    creating: createNote.isPending,
   };
 
   return (
@@ -230,7 +208,7 @@ export function AppShell() {
       <div
         className={cn(
           "h-full w-full md:hidden",
-          mobileView === "list" ? "flex" : "hidden"
+          isMobileFolderList ? "flex" : "hidden"
         )}
       >
         <Sidebar {...sidebarProps} />
@@ -239,44 +217,23 @@ export function AppShell() {
       <div
         className={cn(
           "min-w-0 flex-1",
-          mobileView === "editor" ? "flex" : "hidden md:flex"
+          isMobileFolderList ? "hidden md:flex" : "flex"
         )}
       >
-        {editorLoading ? (
-          <NoteEditorSkeleton className="w-full" />
-        ) : (
-          <NoteEditor
-            note={selectedNote}
-            showBack
-            onBack={goBackToList}
-            className="w-full"
-            onCreateNote={handleNewNote}
-          />
-        )}
+        <MobilePageTransition
+          className="w-full"
+          forceKey={isMobileAllNotes ? "all-notes" : undefined}
+        >
+          {children}
+        </MobilePageTransition>
       </div>
 
-      {/* Always available on mobile — capture without leaving the current note */}
-      <NewNoteButton
-        variant="fab-capture"
-        onClick={openQuickCapture}
-      />
+      <NewNoteButton variant="fab" onClick={handleNewNote} />
 
-      <SearchPalette
-        open={searchOpen}
-        onClose={closeSearch}
-        onSelectNote={selectNote}
-      />
-
-      <QuickCaptureOverlay
-        open={quickCaptureOpen}
-        onClose={closeQuickCapture}
-      />
-
-      <TemplatePicker
-        open={templatePickerOpen}
-        busy={createNote.isPending}
-        onSelect={(id) => void handleTemplateSelect(id)}
-        onCancel={closeTemplatePicker}
+      <MobileSearchOverlay
+        open={mobileSearchOpen}
+        onClose={closeMobileSearch}
+        initialScopeFolderId={mobileSearchScopeFolderId ?? activeFolderId}
       />
     </div>
   );

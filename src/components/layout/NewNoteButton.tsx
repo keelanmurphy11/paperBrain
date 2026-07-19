@@ -1,11 +1,11 @@
 "use client";
 
-import { Plus, Zap } from "lucide-react";
+import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type NewNoteButtonProps = {
   onClick?: () => void;
-  variant?: "sidebar" | "fab" | "fab-capture";
+  variant?: "sidebar" | "fab";
   className?: string;
   disabled?: boolean;
 };
@@ -16,14 +16,13 @@ export function NewNoteButton({
   className,
   disabled,
 }: NewNoteButtonProps) {
-  if (variant === "fab" || variant === "fab-capture") {
-    const isCapture = variant === "fab-capture";
+  if (variant === "fab") {
     return (
       <button
         type="button"
         onClick={onClick}
         disabled={disabled}
-        aria-label={isCapture ? "Quick capture" : "New note"}
+        aria-label="New note"
         className={cn(
           "fixed z-20 flex size-12 items-center justify-center rounded-full bg-accent text-white shadow-md",
           "bottom-[max(1.5rem,env(safe-area-inset-bottom))] right-[max(1.5rem,env(safe-area-inset-right))]",
@@ -34,11 +33,7 @@ export function NewNoteButton({
           className
         )}
       >
-        {isCapture ? (
-          <Zap className="size-5" strokeWidth={2} aria-hidden />
-        ) : (
-          <Plus className="size-5" strokeWidth={2} aria-hidden />
-        )}
+        <Plus className="size-5" strokeWidth={2} aria-hidden />
       </button>
     );
   }

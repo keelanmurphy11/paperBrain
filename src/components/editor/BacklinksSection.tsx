@@ -1,9 +1,9 @@
 "use client";
 
 import { useBacklinks } from "@/hooks/use-links";
+import { useAppNav } from "@/hooks/use-app-nav";
 import { getNotePreview } from "@/lib/notes";
 import { noteDisplayTitle } from "@/lib/fuzzy";
-import { useUiStore } from "@/store/ui";
 import { cn } from "@/lib/utils";
 
 type BacklinksSectionProps = {
@@ -13,7 +13,7 @@ type BacklinksSectionProps = {
 
 export function BacklinksSection({ noteId, className }: BacklinksSectionProps) {
   const { data: backlinks = [], isLoading } = useBacklinks(noteId);
-  const selectNote = useUiStore((s) => s.selectNote);
+  const { openNote } = useAppNav();
 
   if (isLoading) {
     return (
@@ -49,7 +49,7 @@ export function BacklinksSection({ noteId, className }: BacklinksSectionProps) {
           <li key={note.id}>
             <button
               type="button"
-              onClick={() => selectNote(note.id)}
+              onClick={() => openNote(note.id)}
               className="w-full rounded-md px-2 py-2 text-left transition-colors duration-fast ease-out hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
             >
               <span className="block text-sm text-foreground">

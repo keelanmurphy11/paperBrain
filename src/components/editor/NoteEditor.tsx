@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, Download, Trash2 } from "lucide-react";
+import { Download, Trash2 } from "lucide-react";
 import {
   useEffect,
   useRef,
@@ -14,18 +14,21 @@ import { InsertImageButton } from "@/components/editor/InsertImageButton";
 import { NoteFolderBreadcrumb } from "@/components/editor/NoteFolderBreadcrumb";
 import { NoteTags } from "@/components/editor/NoteTags";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
+import { MobileBackHeader } from "@/components/layout/MobileBackHeader";
 import { useFolders } from "@/hooks/use-folders";
 import { useDeleteNote, useUpdateNote } from "@/hooks/use-notes";
 import { useSyncOutgoingLinks } from "@/hooks/use-links";
 import { useNoteSources } from "@/hooks/use-sources";
 import { collectNoteLinkIdsFromContent } from "@/components/editor/extensions/note-link";
 import { exportSingleNote } from "@/lib/export-notes";
+import { folderPath, HOME_PATH } from "@/lib/navigation";
 import { EMPTY_DOC, isTipTapDoc } from "@/lib/notes";
 import { toast } from "@/store/toast";
 import { useUiStore } from "@/store/ui";
 import type { Note, Source, TipTapDoc } from "@/types";
 import { cn } from "@/lib/utils";
 import type { Editor } from "@tiptap/react";
+import { useRouter } from "next/navigation";
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 
@@ -49,7 +52,9 @@ export function NoteEditor({
       <section
         className={cn("flex h-full min-h-0 flex-col bg-surface", className)}
       >
-        {showBack ? <MobileBackHeader onBack={onBack} /> : null}
+        {showBack && onBack ? (
+          <MobileBackHeader onBack={onBack} label="Back" />
+        ) : null}
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-editor px-4 pb-24 pt-6 md:px-12 md:pt-14">
             <EmptyEditorState onCreateNote={onCreateNote} />
@@ -83,8 +88,7 @@ function NoteEditorInner({
 }) {
   const focusTitleOnOpen = useUiStore((s) => s.focusTitleOnOpen);
   const consumeFocusTitle = useUiStore((s) => s.consumeFocusTitle);
-  const clearSelection = useUiStore((s) => s.clearSelection);
-  const goBackToList = useUiStore((s) => s.goBackToList);
+  const router = useRouter();
 
   const { mutateAsync: updateNoteAsync } = useUpdateNote();
   const { mutateAsync: syncLinksAsync } = useSyncOutgoingLinks();
@@ -245,10 +249,10 @@ function NoteEditorInner({
 
   async function handleConfirmDelete() {
     try {
+      const folderId = note.folder_id;
       await deleteNote.mutateAsync(note.id);
       setConfirmDelete(false);
-      clearSelection();
-      goBackToList();
+      router.replace(folderId ? folderPath(folderId) : HOME_PATH);
     } catch {
       setSaveStatus("error");
       toast("Couldn’t delete note", "error");
@@ -287,8 +291,8 @@ function NoteEditorInner({
       className={cn("flex h-full min-h-0 flex-col bg-surface", className)}
     >
       <header className="flex shrink-0 items-center justify-between gap-2 px-2 pt-[max(0.5rem,env(safe-area-inset-top))] md:px-4 md:pt-3">
-        {showBack ? (
-          <MobileBackHeader onBack={onBack} />
+        {showBack && onBack ? (
+          <MobileBackHeader onBack={onBack} label="Back" />
         ) : (
           <div className="hidden md:block" />
         )}
@@ -386,19 +390,6 @@ function NoteEditorInner({
         onConfirm={() => void handleConfirmDelete()}
       />
     </section>
-  );
-}
-
-function MobileBackHeader({ onBack }: { onBack?: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onBack}
-      className="inline-flex min-h-11 items-center gap-0.5 rounded-lg px-2 text-sm text-accent transition-colors duration-fast ease-out hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 md:hidden"
-    >
-      <ChevronLeft className="size-5" strokeWidth={1.75} aria-hidden />
-      Notes
-    </button>
   );
 }
 

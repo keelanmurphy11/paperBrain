@@ -1,7 +1,7 @@
 import { mergeAttributes, Mark } from "@tiptap/core";
 import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import type { TipTapDoc } from "@/types";
-import { useUiStore } from "@/store/ui";
+import { navigateToNote } from "@/lib/navigation";
 
 export type NoteLinkAttrs = {
   noteId: string | null;
@@ -120,7 +120,7 @@ export const NoteLink = Mark.create({
             if (!noteId) return false;
 
             event.preventDefault();
-            useUiStore.getState().selectNote(noteId);
+            navigateToNote(noteId);
             return true;
           },
         },

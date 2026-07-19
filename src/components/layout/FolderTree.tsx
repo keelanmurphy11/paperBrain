@@ -8,22 +8,20 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
+import { usePathname } from "next/navigation";
 import {
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type DragEvent as ReactDragEvent,
 } from "react";
 import { DeleteFolderDialog } from "@/components/layout/DeleteFolderDialog";
+import { SidebarNavItem } from "@/components/layout/SidebarNavItem";
 import {
   folderNoteCount,
   getChildFolders,
   getRootFolders,
-  inboxUnfiledCount,
-  NOTE_DRAG_MIME,
-  notesInFolder,
   useCreateFolder,
   useDeleteFolder,
   useFolders,
@@ -31,17 +29,14 @@ import {
   useRenameFolder,
 } from "@/hooks/use-folders";
 import type { DeleteFolderMode } from "@/lib/folders-api";
-import { formatNoteDate } from "@/lib/format";
+import { folderPath } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 import { toast } from "@/store/toast";
+import { useUiStore } from "@/store/ui";
 import type { Folder, FolderId, Note } from "@/types";
 
 type FolderTreeProps = {
   notes: Note[];
-  selectedNoteId: string | null;
-  activeFolderId: string | null;
-  onSelectNote: (id: string) => void;
-  onSelectFolder: (folderId: FolderId) => void;
   onNewNoteInFolder: (folderId: FolderId) => void;
   isLoading?: boolean;
   isError?: boolean;
@@ -59,17 +54,25 @@ type PendingDelete = {
   noteCount: number;
 } | null;
 
+/**
+ * User-created folders only (Inbox is pinned separately in the sidebar).
+ * Rows are route Links; note lists live on Folder View.
+ */
 export function FolderTree({
   notes,
-  selectedNoteId,
-  activeFolderId,
-  onSelectNote,
-  onSelectFolder,
   onNewNoteInFolder,
   isLoading,
   isError,
   errorMessage,
 }: FolderTreeProps) {
+  const pathname = usePathname();
+  const activeFolderId = pathname.startsWith("/folder/")
+    ? pathname.slice("/folder/".length).split("/")[0] ?? null
+    : null;
+
+  const setLastFolderId = useUiStore((s) => s.setLastFolderId);
+  const setMobileHomePane = useUiStore((s) => s.setMobileHomePane);
+
   const { data: folders = [], isLoading: foldersLoading } = useFolders();
   const createFolder = useCreateFolder();
   const renameFolder = useRenameFolder();
@@ -82,15 +85,12 @@ export function FolderTree({
   const [pendingDelete, setPendingDelete] = useState<PendingDelete>(null);
   const [dropTargetId, setDropTargetId] = useState<FolderId | null>(null);
 
-  const roots = useMemo(() => getRootFolders(folders), [folders]);
-  const unfiledCount = useMemo(
-    () => inboxUnfiledCount(notes, folders),
-    [notes, folders]
+  const roots = useMemo(
+    () => getRootFolders(folders).filter((f) => !f.is_inbox),
+    [folders]
   );
 
-  // Expand Inbox by default; keep the active folder expanded
   useEffect(() => {
-    const inbox = folders.find((f) => f.is_inbox);
     setExpanded((prev) => {
       let next = prev;
       const ensure = (id: string) => {
@@ -98,7 +98,6 @@ export function FolderTree({
         if (next === prev) next = { ...prev };
         next[id] = true;
       };
-      if (inbox) ensure(inbox.id);
       if (activeFolderId) {
         ensure(activeFolderId);
         const active = folders.find((f) => f.id === activeFolderId);
@@ -127,6 +126,14 @@ export function FolderTree({
       });
     },
     []
+  );
+
+  const navigateToFolder = useCallback(
+    (folderId: FolderId) => {
+      setLastFolderId(folderId);
+      setMobileHomePane("folders");
+    },
+    [setLastFolderId, setMobileHomePane]
   );
 
   const handleCreateFolder = useCallback(
@@ -211,7 +218,6 @@ export function FolderTree({
       if (!note || note.folder_id === folderId) return;
       try {
         await moveNote.mutateAsync({ noteId, folderId });
-        onSelectFolder(folderId);
       } catch (err) {
         console.error("Failed to move note", err);
         toast(
@@ -220,7 +226,7 @@ export function FolderTree({
         );
       }
     },
-    [moveNote, notes, onSelectFolder]
+    [moveNote, notes]
   );
 
   const menuFolder = menu
@@ -231,7 +237,7 @@ export function FolderTree({
 
   return (
     <div className="pb-4">
-      <div className="flex items-center gap-1 px-5 pb-1.5 pt-3">
+      <div className="flex items-center gap-1 px-3 pb-1 pt-4">
         <p className="flex-1 text-[11px] font-medium uppercase tracking-wider text-muted-subtle">
           Folders
         </p>
@@ -250,9 +256,9 @@ export function FolderTree({
       {loading ? (
         <FolderTreeSkeleton />
       ) : isError ? (
-        <div className="px-5 py-8">
+        <div className="px-4 py-6">
           <p className="text-sm text-danger" role="alert">
-            {errorMessage ?? "Couldn’t load notes"}
+            {errorMessage ?? "Couldn’t load folders"}
           </p>
         </div>
       ) : (
@@ -266,13 +272,10 @@ export function FolderTree({
               depth={0}
               expanded={expanded}
               renamingId={renamingId}
-              selectedNoteId={selectedNoteId}
               activeFolderId={activeFolderId}
               dropTargetId={dropTargetId}
-              unfiledCount={folder.is_inbox ? unfiledCount : 0}
               onToggle={toggleExpanded}
-              onSelectNote={onSelectNote}
-              onSelectFolder={onSelectFolder}
+              onNavigate={navigateToFolder}
               onOpenMenu={openMenu}
               onRenameSubmit={handleRename}
               onRenameCancel={() => setRenamingId(null)}
@@ -282,7 +285,7 @@ export function FolderTree({
           ))}
 
           {roots.length === 0 ? (
-            <li className="px-3 py-6 text-center text-sm text-muted">
+            <li className="px-3 py-4 text-center text-xs text-muted-subtle">
               No folders yet
             </li>
           ) : null}
@@ -336,13 +339,10 @@ function FolderNode({
   depth,
   expanded,
   renamingId,
-  selectedNoteId,
   activeFolderId,
   dropTargetId,
-  unfiledCount,
   onToggle,
-  onSelectNote,
-  onSelectFolder,
+  onNavigate,
   onOpenMenu,
   onRenameSubmit,
   onRenameCancel,
@@ -355,13 +355,10 @@ function FolderNode({
   depth: number;
   expanded: Record<string, boolean>;
   renamingId: FolderId | null;
-  selectedNoteId: string | null;
   activeFolderId: string | null;
   dropTargetId: FolderId | null;
-  unfiledCount: number;
   onToggle: (id: FolderId) => void;
-  onSelectNote: (id: string) => void;
-  onSelectFolder: (folderId: FolderId) => void;
+  onNavigate: (folderId: FolderId) => void;
   onOpenMenu: (
     folderId: FolderId,
     point: { clientX: number; clientY: number },
@@ -375,13 +372,12 @@ function FolderNode({
   const isOpen = expanded[folder.id] ?? false;
   const children = depth === 0 ? getChildFolders(folders, folder.id) : [];
   const isActive = activeFolderId === folder.id;
-  // Folder-only: show notes for the selected folder, not its subfolders
-  const folderNotes = isActive ? notesInFolder(notes, folder.id) : [];
   const count = folderNoteCount(notes, folder.id);
   const isRenaming = renamingId === folder.id;
   const isDropTarget = dropTargetId === folder.id;
   const longPressTimer = useRef<number | null>(null);
   const renameRef = useRef<HTMLInputElement>(null);
+  const hasChildren = children.length > 0;
 
   useEffect(() => {
     if (!isRenaming) return;
@@ -389,95 +385,38 @@ function FolderNode({
     renameRef.current?.select();
   }, [isRenaming]);
 
-  const paddingLeft = 8 + depth * 14;
-
-  function handleDragOver(event: ReactDragEvent) {
-    if (![...event.dataTransfer.types].includes(NOTE_DRAG_MIME)) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-    if (dropTargetId !== folder.id) onDropTargetChange(folder.id);
-  }
-
-  function handleDragLeave(event: ReactDragEvent) {
-    if (event.currentTarget.contains(event.relatedTarget as Node)) return;
-    if (dropTargetId === folder.id) onDropTargetChange(null);
-  }
-
-  function handleDrop(event: ReactDragEvent) {
-    event.preventDefault();
-    const noteId = event.dataTransfer.getData(NOTE_DRAG_MIME);
-    if (noteId) onDropNote(folder.id, noteId);
-    else onDropTargetChange(null);
+  function clearLongPress() {
+    if (longPressTimer.current) {
+      window.clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
   }
 
   return (
-    <li>
-      <div
-        className={cn(
-          "group flex min-h-9 items-center gap-0.5 rounded-md transition-colors duration-fast ease-out",
-          isDropTarget
-            ? "bg-accent-subtle ring-1 ring-inset ring-accent/40"
-            : isActive
-              ? "bg-accent-subtle"
-              : "hover:bg-hover"
-        )}
-        style={{ paddingLeft }}
-        onContextMenu={(e) => {
-          onOpenMenu(
-            folder.id,
-            { clientX: e.clientX, clientY: e.clientY },
-            e
-          );
-        }}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        onTouchStart={(e) => {
-          const touch = e.touches[0];
-          if (!touch) return;
-          longPressTimer.current = window.setTimeout(() => {
-            onOpenMenu(folder.id, {
-              clientX: touch.clientX,
-              clientY: touch.clientY,
-            });
-          }, 480);
-        }}
-        onTouchEnd={() => {
-          if (longPressTimer.current) {
-            window.clearTimeout(longPressTimer.current);
-            longPressTimer.current = null;
-          }
-        }}
-        onTouchMove={() => {
-          if (longPressTimer.current) {
-            window.clearTimeout(longPressTimer.current);
-            longPressTimer.current = null;
-          }
-        }}
-      >
-        <button
-          type="button"
-          aria-expanded={isOpen}
-          aria-label={isOpen ? "Collapse folder" : "Expand folder"}
-          onClick={() => onToggle(folder.id)}
-          className="flex size-6 shrink-0 items-center justify-center rounded text-muted-subtle transition-colors duration-fast ease-out hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+    <li
+      onTouchStart={(e) => {
+        const touch = e.touches[0];
+        if (!touch) return;
+        longPressTimer.current = window.setTimeout(() => {
+          onOpenMenu(folder.id, {
+            clientX: touch.clientX,
+            clientY: touch.clientY,
+          });
+        }, 480);
+      }}
+      onTouchEnd={clearLongPress}
+      onTouchMove={clearLongPress}
+    >
+      {isRenaming ? (
+        <div
+          className="flex min-h-9 items-center px-2"
+          style={{ paddingLeft: 8 + depth * 12 + 24 }}
         >
-          <ChevronDown
-            className={cn(
-              "size-3.5 transition-transform duration-fast ease-out",
-              isOpen ? "rotate-0" : "-rotate-90"
-            )}
-            strokeWidth={1.75}
-            aria-hidden
-          />
-        </button>
-
-        {isRenaming ? (
           <input
             ref={renameRef}
             defaultValue={folder.name}
             aria-label="Rename folder"
-            className="min-w-0 flex-1 rounded border border-border bg-surface px-1.5 py-0.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-accent/30"
+            className="w-full rounded border border-border bg-surface px-1.5 py-0.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-accent/30"
             onBlur={(e) => onRenameSubmit(folder.id, e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
@@ -489,58 +428,85 @@ function FolderNode({
               }
             }}
           />
-        ) : (
-          <button
-            type="button"
-            onClick={() => {
-              onSelectFolder(folder.id);
-              if (!isOpen) onToggle(folder.id);
-            }}
-            className={cn(
-              "min-w-0 flex-1 truncate py-1.5 text-left text-sm transition-colors duration-fast ease-out",
-              isActive ? "font-medium text-accent" : "text-foreground"
-            )}
-          >
-            {folder.name}
-          </button>
-        )}
-
-        {folder.is_inbox && unfiledCount > 0 ? (
-          <span
-            title={`${unfiledCount} unfiled note${unfiledCount === 1 ? "" : "s"} in Inbox`}
-            className="mr-0.5 shrink-0 rounded bg-accent-subtle px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-accent"
-          >
-            {unfiledCount} unfiled
-          </span>
-        ) : (
-          <span className="shrink-0 pr-1 text-[11px] tabular-nums text-muted-subtle">
-            {count}
-          </span>
-        )}
-
-        <button
-          type="button"
-          title="Folder actions"
-          aria-label={`Actions for ${folder.name}`}
-          onClick={(e) => {
-            const rect = e.currentTarget.getBoundingClientRect();
+        </div>
+      ) : (
+        <SidebarNavItem
+          href={folderPath(folder.id)}
+          label={folder.name}
+          count={count}
+          active={isActive}
+          depth={depth}
+          onNavigate={() => {
+            onNavigate(folder.id);
+            if (hasChildren && !isOpen) onToggle(folder.id);
+          }}
+          dropFolderId={folder.id}
+          onDropNote={onDropNote}
+          isDropTarget={isDropTarget}
+          onDropTargetChange={onDropTargetChange}
+          onContextMenu={(e) => {
             onOpenMenu(
               folder.id,
-              { clientX: rect.right, clientY: rect.bottom },
+              { clientX: e.clientX, clientY: e.clientY },
               e
             );
           }}
-          className={cn(
-            "mr-0.5 flex size-6 shrink-0 items-center justify-center rounded text-muted-subtle transition-colors duration-fast ease-out",
-            "opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100",
-            "hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
-          )}
-        >
-          <MoreHorizontal className="size-3.5" strokeWidth={1.75} aria-hidden />
-        </button>
-      </div>
+          leading={
+            hasChildren ? (
+              <button
+                type="button"
+                aria-expanded={isOpen}
+                aria-label={isOpen ? "Collapse folder" : "Expand folder"}
+                onClick={(e) => {
+                  e.preventDefault();
+                  onToggle(folder.id);
+                }}
+                className="flex size-6 shrink-0 items-center justify-center rounded text-muted-subtle transition-colors duration-fast ease-out hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+              >
+                <ChevronDown
+                  className={cn(
+                    "size-3.5 transition-transform duration-fast ease-out",
+                    isOpen ? "rotate-0" : "-rotate-90"
+                  )}
+                  strokeWidth={1.75}
+                  aria-hidden
+                />
+              </button>
+            ) : (
+              <span className="size-6 shrink-0" aria-hidden />
+            )
+          }
+          trailing={
+            <button
+              type="button"
+              title="Folder actions"
+              aria-label={`Actions for ${folder.name}`}
+              onClick={(e) => {
+                e.preventDefault();
+                const rect = e.currentTarget.getBoundingClientRect();
+                onOpenMenu(
+                  folder.id,
+                  { clientX: rect.right, clientY: rect.bottom },
+                  e
+                );
+              }}
+              className={cn(
+                "mr-0.5 flex size-6 shrink-0 items-center justify-center rounded text-muted-subtle transition-colors duration-fast ease-out",
+                "opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100",
+                "hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+              )}
+            >
+              <MoreHorizontal
+                className="size-3.5"
+                strokeWidth={1.75}
+                aria-hidden
+              />
+            </button>
+          }
+        />
+      )}
 
-      {isOpen ? (
+      {isOpen && hasChildren ? (
         <ul className="flex flex-col gap-0.5">
           {children.map((child) => (
             <FolderNode
@@ -551,13 +517,10 @@ function FolderNode({
               depth={1}
               expanded={expanded}
               renamingId={renamingId}
-              selectedNoteId={selectedNoteId}
               activeFolderId={activeFolderId}
               dropTargetId={dropTargetId}
-              unfiledCount={0}
               onToggle={onToggle}
-              onSelectNote={onSelectNote}
-              onSelectFolder={onSelectFolder}
+              onNavigate={onNavigate}
               onOpenMenu={onOpenMenu}
               onRenameSubmit={onRenameSubmit}
               onRenameCancel={onRenameCancel}
@@ -565,80 +528,9 @@ function FolderNode({
               onDropNote={onDropNote}
             />
           ))}
-
-          {folderNotes.map((note) => (
-            <li key={note.id}>
-              <NoteTreeItem
-                note={note}
-                selected={note.id === selectedNoteId}
-                paddingLeft={paddingLeft + 22}
-                onSelect={onSelectNote}
-              />
-            </li>
-          ))}
-
-          {isActive &&
-          children.length === 0 &&
-          folderNotes.length === 0 ? (
-            <li
-              className="py-1.5 text-[12px] text-muted-subtle"
-              style={{ paddingLeft: paddingLeft + 22 }}
-            >
-              Empty
-            </li>
-          ) : null}
         </ul>
       ) : null}
     </li>
-  );
-}
-
-function NoteTreeItem({
-  note,
-  selected,
-  paddingLeft,
-  onSelect,
-}: {
-  note: Note;
-  selected: boolean;
-  paddingLeft: number;
-  onSelect: (id: string) => void;
-}) {
-  function handleDragStart(event: ReactDragEvent) {
-    // Desktop-only affordance; touch browsers often lack reliable HTML5 DnD
-    if (window.matchMedia("(pointer: coarse)").matches) {
-      event.preventDefault();
-      return;
-    }
-    event.dataTransfer.setData(NOTE_DRAG_MIME, note.id);
-    event.dataTransfer.effectAllowed = "move";
-  }
-
-  return (
-    <button
-      type="button"
-      draggable
-      onDragStart={handleDragStart}
-      onClick={() => onSelect(note.id)}
-      className={cn(
-        "flex w-full min-h-8 cursor-grab items-center gap-2 rounded-md py-1.5 pr-2 text-left transition-colors duration-fast ease-out active:cursor-grabbing",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30",
-        selected
-          ? "bg-active text-foreground"
-          : "text-muted hover:bg-hover hover:text-foreground"
-      )}
-      style={{ paddingLeft }}
-    >
-      <span className="min-w-0 flex-1 truncate text-[13px]">
-        {note.title.trim() || "Untitled"}
-      </span>
-      <time
-        dateTime={note.updated_at}
-        className="shrink-0 text-[10px] text-muted-subtle"
-      >
-        {formatNoteDate(note.updated_at)}
-      </time>
-    </button>
   );
 }
 
@@ -768,9 +660,8 @@ function FolderTreeSkeleton() {
         <div
           key={i}
           className="flex h-8 items-center gap-2 rounded-md px-2"
-          style={{ paddingLeft: 8 + (i % 2) * 14 }}
+          style={{ paddingLeft: 8 + (i % 2) * 12 }}
         >
-          <div className="size-3 animate-pulse rounded bg-border-subtle" />
           <div className="h-3 max-w-[7rem] flex-1 animate-pulse rounded bg-border-subtle" />
           <div className="h-2.5 w-4 animate-pulse rounded bg-border-subtle" />
         </div>

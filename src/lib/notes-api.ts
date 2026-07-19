@@ -32,8 +32,6 @@ export type CreateNoteOptions = {
   folderId?: FolderId | null;
   content?: TipTapDoc;
   content_text?: string;
-  /** Optional template id persisted for future filtering (e.g. "fact"). */
-  templateType?: string | null;
 };
 
 export async function createNote(
@@ -62,7 +60,6 @@ export async function createNote(
       content_text: options.content_text ?? "",
       user_id: user.id,
       folder_id: folderId,
-      template_type: options.templateType ?? null,
     })
     .select("*")
     .single();

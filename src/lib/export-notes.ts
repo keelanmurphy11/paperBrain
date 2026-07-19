@@ -75,10 +75,6 @@ function buildFrontmatter(ctx: NoteExportContext): string {
     lines.push("sources: []");
   }
 
-  if (ctx.note.template_type) {
-    lines.push(`template: ${yamlEscape(ctx.note.template_type)}`);
-  }
-
   lines.push(`created_at: ${ctx.note.created_at}`);
   lines.push(`updated_at: ${ctx.note.updated_at}`);
   lines.push(`id: ${ctx.note.id}`);
