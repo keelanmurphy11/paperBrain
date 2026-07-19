@@ -1,13 +1,7 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCreateNote, useNotes } from "@/hooks/use-notes";
 import { fuzzyMatchNotes, noteDisplayTitle } from "@/lib/fuzzy";
 import { cn } from "@/lib/utils";
@@ -23,9 +17,26 @@ type MatchRange = {
   query: string;
 };
 
+type Coords = {
+  top: number;
+  left: number;
+};
+
 type MenuOption =
   | { kind: "note"; id: string; title: string }
   | { kind: "create"; title: string };
+
+function matchEquals(a: MatchRange | null, b: MatchRange | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.from === b.from && a.to === b.to && a.query === b.query;
+}
+
+function coordsEquals(a: Coords | null, b: Coords | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.top === b.top && a.left === b.left;
+}
 
 function findWikiLinkMatch(editor: Editor): MatchRange | null {
   const { state } = editor;
@@ -58,16 +69,22 @@ export function WikiLinkMenu({ editor, currentNoteId }: WikiLinkMenuProps) {
 
   const [match, setMatch] = useState<MatchRange | null>(null);
   const [highlight, setHighlight] = useState(0);
-  const [coords, setCoords] = useState<{ top: number; left: number } | null>(
-    null
-  );
+  const [coords, setCoords] = useState<Coords | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const matchRef = useRef(match);
+  matchRef.current = match;
 
   const refresh = useCallback(() => {
     const next = findWikiLinkMatch(editor);
-    setMatch(next);
+
+    if (!matchEquals(matchRef.current, next)) {
+      matchRef.current = next;
+      setMatch(next);
+    }
+
     if (!next) {
-      setCoords(null);
+      setCoords((prev) => (prev === null ? prev : null));
       return;
     }
 
@@ -77,16 +94,17 @@ export function WikiLinkMenu({ editor, currentNoteId }: WikiLinkMenuProps) {
         editor.view.dom.closest("[data-wiki-link-root]") ??
         editor.view.dom.parentElement;
       if (!root) {
-        setCoords(null);
+        setCoords((prev) => (prev === null ? prev : null));
         return;
       }
       const base = root.getBoundingClientRect();
-      setCoords({
+      const nextCoords: Coords = {
         top: start.bottom - base.top + 6,
         left: Math.max(0, start.left - base.left),
-      });
+      };
+      setCoords((prev) => (coordsEquals(prev, nextCoords) ? prev : nextCoords));
     } catch {
-      setCoords(null);
+      setCoords((prev) => (prev === null ? prev : null));
     }
   }, [editor]);
 
@@ -99,11 +117,6 @@ export function WikiLinkMenu({ editor, currentNoteId }: WikiLinkMenuProps) {
       editor.off("selectionUpdate", refresh);
     };
   }, [editor, refresh]);
-
-  useLayoutEffect(() => {
-    if (!match) return;
-    refresh();
-  }, [match?.query, match?.from, match?.to, refresh, match]);
 
   const matches = useMemo(() => {
     if (!match) return [];
@@ -166,6 +179,7 @@ export function WikiLinkMenu({ editor, currentNoteId }: WikiLinkMenuProps) {
           })
           .run();
 
+        matchRef.current = null;
         setMatch(null);
       } catch (err) {
         console.error("Failed to insert note link", err);
@@ -202,6 +216,7 @@ export function WikiLinkMenu({ editor, currentNoteId }: WikiLinkMenuProps) {
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
+        matchRef.current = null;
         setMatch(null);
       }
     };
